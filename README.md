@@ -1,4 +1,4 @@
-# Evo Script
+# Echo YZ
  Allowing AI to improve itself
 
 Simply - Reasoning Framework based on Engineering Design Cycle
