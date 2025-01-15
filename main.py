@@ -45,7 +45,7 @@ def fetch_duckduckgo(query: str) -> Optional[str]:
 #     - We define a helper function for GPT ChatCompletion.
 #     - Adjust model, temperature, etc. as needed.
 ###############################################################################
-def call_gpt_system(system_instructions: str, user_message: str, model: str = "gpt-4o-mini"):
+def call_gpt_system(system_instructions: str, user_message: str, model: str):
     """
     Calls GPT with system instructions and user message using the new OpenAI client.
     """
@@ -85,7 +85,7 @@ def multi_step_orchestration(high_level_prompt: str):
         "You are an AI orchestrator. The user gave a high-level prompt. "
         "Please break it down into sub-steps to gather knowledge, code, etc."
     )
-    breakdown = call_gpt_system(system_msg, high_level_prompt, model="gpt-4o-mini")
+    breakdown = call_gpt_system(system_msg, high_level_prompt, model="gpt-4o")
     if not breakdown:
         print("⚠️ Failed to get a breakdown from GPT. Exiting...")
         return {"error": "Failed to generate breakdown from GPT."}
@@ -98,7 +98,7 @@ def multi_step_orchestration(high_level_prompt: str):
         + breakdown
         + " Return them in a list, such as search('sample search query here')."
     )
-    search_query = call_gpt_system(system_msg, searches, model="gpt-4o-mini")
+    search_query = call_gpt_system(system_msg, searches, model="gpt-4o")
     if not search_query:
         print("⚠️ Failed to generate search queries from GPT. Exiting...")
         return {"error": "Failed to generate search queries from GPT."}
@@ -157,10 +157,10 @@ def multi_step_orchestration(high_level_prompt: str):
     # ---- Step 4.5: Ask GPT to produce code solution
     print("\n💻 Step 5: Generating code solution...")
     system_msg_code = (
-        "You are an AI that generates code and written solutions Code can be empty when a primary focus is on the written solution which should be in the explanation. Return a JSON with keys "
+        "You are an AI that generates code solutions. Return a JSON with keys "
         "'explanation', 'code', 'installation', 'execution'."
     )
-    code_solution_json_str = call_gpt_system(system_msg_code, final_plan, model="gpt-4o-mini")
+    code_solution_json_str = call_gpt_system(system_msg_code, final_plan, model="gpt-4o")
     if not code_solution_json_str:
         print("⚠️ Failed to generate code solution.")
         return {"error": "Failed to generate code solution."}
