@@ -98,7 +98,7 @@ def multi_step_orchestration(high_level_prompt: str):
         "You are an AI summarizer. Summarize the following raw HTML or text from DuckDuckGo. "
         "Focus on tic-tac-toe winning strategies."
     )
-    raw_search_summary = call_gpt_system(system_msg_summary, duckduckgo_data[:5000], model="gpt-4o")
+    raw_search_summary = call_gpt_system(system_msg_summary, duckduckgo_data[:5000], model="gpt-4o-mini")
 
     print("=== GPT's Summary of DuckDuckGo Search ===")
     print(raw_search_summary)
