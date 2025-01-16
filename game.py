@@ -1,3 +1,5 @@
+#code that was ouputted by AI from the first test of echo
+
 def display_board(board):
     """Displays the current state of the board."""
     print(f"\n {board[0]} | {board[1]} | {board[2]} ")

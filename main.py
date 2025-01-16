@@ -8,8 +8,7 @@ from openai import OpenAI
 #  Step 1: High-Level Prompt
 ###############################################################################
 HIGH_LEVEL_PROMPT = """
-Make me a tic-tac-toe master by learning how to always win, then code a bot in Python 
-that can play against me in the console. Also provide instructions to run it.
+Create a command-line to-do list manager in Python that allows users to add, remove, view, and mark tasks as completed. Provide detailed instructions on how to install dependencies and use the application.
 """
 
 ###############################################################################
@@ -165,30 +164,58 @@ def multi_step_orchestration(high_level_prompt: str):
         print("⚠️ Failed to generate code solution.")
         return {"error": "Failed to generate code solution."}
 
-    # Attempt to parse JSON. If it fails, just return the string.
+    # Log the raw response before attempting to parse
+    print("\n💾 Logging raw GPT response...")
+    with open('gpt_response.txt', 'w', encoding='utf-8') as f:
+        f.write(code_solution_json_str)
+
+    # Attempt to parse JSON with better error handling
     try:
-        code_solution = json.loads(code_solution_json_str)
-    except json.JSONDecodeError:
-        code_solution = {
-            "explanation": "Could not parse JSON from GPT. Here is raw content.",
-            "code": code_solution_json_str,
-            "installation": "",
-            "execution": "",
+        # First, find and extract just the JSON content
+        json_start = code_solution_json_str.find('```json')
+        if json_start != -1:
+            # Remove everything before ```json
+            code_solution_json_str = code_solution_json_str[json_start + 7:]
+            
+            # Remove everything after the next ```
+            json_end = code_solution_json_str.find('```')
+            if json_end != -1:
+                code_solution_json_str = code_solution_json_str[:json_end]
+        
+        code_solution = json.loads(code_solution_json_str.strip())
+        
+        if not isinstance(code_solution, dict):
+            raise ValueError("Parsed JSON is not a dictionary")
+        
+        required_keys = ['explanation', 'code', 'installation']
+        if not all(key in code_solution for key in required_keys):
+            raise ValueError(f"Missing required keys. Expected: {required_keys}")
+            
+    except (json.JSONDecodeError, ValueError) as e:
+        print(f"⚠️ Error parsing JSON: {e}")
+        print("📝 Raw response has been saved to 'gpt_response.txt'")
+        return {
+            "error": "JSON parsing failed",
+            "raw_content": code_solution_json_str
         }
 
-    if isinstance(code_solution, dict) and 'code' in code_solution:
-        # Write the code to ai.py
-        with open('ai.py', 'w') as f:
-            f.write(code_solution['code'])
-        
-        # Print installation instructions
-        if 'installation' in code_solution:
-            print("\n📦 Installation Instructions:")
-            print(code_solution['installation'])
+    # If parsing succeeded, write the code to ai.py
+    if 'code' in code_solution:
+        try:
+            # Clean and format the code before writing
+            clean_code = (code_solution['code']
+                .replace('\\n', '\n')  # Replace escaped newlines
+                .replace('\"', '"')    # Replace escaped quotes
+                .strip()               # Remove leading/trailing whitespace
+            )
             
-        print("\n🚀 To run the program:")
-        print("python ai.py")
-    
+            # Write the cleaned code
+            with open('ai.py', 'w', encoding='utf-8') as f:
+                f.write(clean_code)
+            print("✅ Successfully wrote code to ai.py")
+        except Exception as e:
+            print(f"⚠️ Error writing to ai.py: {e}")
+
     return code_solution
 
 ###############################################################################
@@ -226,7 +253,26 @@ def pretty_print_json(json_data):
     print("\n=== Final Output ===")
     print(pretty_print_dict(json_data))
 
+def test_duckduckgo_connection():
+    """
+    Tests the DuckDuckGo connection with a simple search.
+    Returns True if successful, False otherwise.
+    """
+    print("\n🔍 Testing DuckDuckGo connection...")
+    test_result = fetch_duckduckgo("python programming")
+    if test_result:
+        print("✅ DuckDuckGo connection test successful")
+        return True
+    else:
+        print("❌ DuckDuckGo connection test failed")
+        return False
+
 def main():
+    # Test DuckDuckGo connection before proceeding
+    if not test_duckduckgo_connection():
+        print("⚠️  Exiting due to DuckDuckGo connection failure")
+        return
+        
     final_output = multi_step_orchestration(HIGH_LEVEL_PROMPT)
     # Comment out or remove the pretty print since we're handling output differently
     # pretty_print_json(final_output)
