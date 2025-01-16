@@ -157,8 +157,8 @@ def multi_step_orchestration(high_level_prompt: str):
     # ---- Step 4.5: Ask GPT to produce code solution
     print("\n💻 Step 5: Generating code solution...")
     system_msg_code = (
-        "You are an AI that generates code solutions. Return a JSON with keys "
-        "'explanation', 'code', 'installation', 'execution'."
+        "You are an AI that generates code solutions. For installation - example: pip install ... Return a JSON with keys "
+        "'explanation', 'code', 'installation'."
     )
     code_solution_json_str = call_gpt_system(system_msg_code, final_plan, model="gpt-4o")
     if not code_solution_json_str:
@@ -176,6 +176,19 @@ def multi_step_orchestration(high_level_prompt: str):
             "execution": "",
         }
 
+    if isinstance(code_solution, dict) and 'code' in code_solution:
+        # Write the code to ai.py
+        with open('ai.py', 'w') as f:
+            f.write(code_solution['code'])
+        
+        # Print installation instructions
+        if 'installation' in code_solution:
+            print("\n📦 Installation Instructions:")
+            print(code_solution['installation'])
+            
+        print("\n🚀 To run the program:")
+        print("python ai.py")
+    
     return code_solution
 
 ###############################################################################
@@ -215,7 +228,8 @@ def pretty_print_json(json_data):
 
 def main():
     final_output = multi_step_orchestration(HIGH_LEVEL_PROMPT)
-    pretty_print_json(final_output)
+    # Comment out or remove the pretty print since we're handling output differently
+    # pretty_print_json(final_output)
 
 if __name__ == "__main__":
     main()
