@@ -8,7 +8,7 @@ from openai import OpenAI
 #  Step 1: High-Level Prompt
 ###############################################################################
 HIGH_LEVEL_PROMPT = """
-Create a command-line to-do list manager in Python that allows users to add, remove, view, and mark tasks as completed. Provide detailed instructions on how to install dependencies and use the application.
+Research ICLR, NeurIPS,and ICML and teach it to me simply in a way where I can understand it.
 """
 
 ###############################################################################
