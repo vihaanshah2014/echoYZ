@@ -9,6 +9,11 @@ import sounddevice as sd
 import numpy as np
 import wave
 from io import BytesIO
+import json
+from datetime import datetime
+from pydantic import BaseModel
+from openai import OpenAI
+from typing import Optional, Dict, List
 
 # Load environment variables from .env file
 load_dotenv()
@@ -16,8 +21,81 @@ load_dotenv()
 # Configuration
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
 SARVAM_API_KEY = os.getenv("SARVAM_API_KEY")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 SARVAM_TTS_URL = "https://api.sarvam.ai/text-to-speech"
 DEEPSEEK_CHAT_URL = "https://api.deepseek.com/v1/chat/completions"
+
+class UserInfo(BaseModel):
+    emotion: Optional[str] = None
+    preferences: Optional[Dict[str, str]] = None
+    facts: Optional[List[str]] = None
+
+class UserProfile:
+    def __init__(self):
+        if not OPENAI_API_KEY:
+            raise ValueError("OpenAI API key not found in environment variables")
+        self.client = OpenAI(api_key=OPENAI_API_KEY)
+        self.profile = {
+            "emotions": {},
+            "preferences": {},
+            "facts": [],
+            "last_interaction": None,
+            "mood_history": []
+        }
+    
+    def update_from_interaction(self, user_message, assistant_response):
+        """Analyze interaction to update user profile"""
+        self.profile["last_interaction"] = datetime.now().isoformat()
+        
+        try:
+            completion = self.client.beta.chat.completions.parse(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": """Extract information about the user from this conversation.
+                    Include:
+                    - Current emotion/mood
+                    - Any preferences or likes/dislikes mentioned
+                    - Personal facts or details shared"""},
+                    {"role": "user", "content": f"User message: {user_message}\nAssistant response: {assistant_response}"},
+                ],
+                response_format=UserInfo,
+            )
+            
+            info = completion.choices[0].message.parsed
+            
+            # Update emotions if detected
+            if info.emotion:
+                self.profile["emotions"][datetime.now().isoformat()] = info.emotion
+                self.profile["mood_history"].append({
+                    "timestamp": datetime.now().isoformat(),
+                    "mood": info.emotion
+                })
+            
+            # Update preferences
+            if info.preferences:
+                self.profile["preferences"].update(info.preferences)
+            
+            # Add new facts
+            if info.facts:
+                for fact in info.facts:
+                    if fact not in self.profile["facts"]:
+                        self.profile["facts"].append(fact)
+                        
+        except Exception as e:
+            print(f"[Profile] Error analyzing interaction: {str(e)}")
+    
+    def save(self, filename="user_profile.json"):
+        """Save user profile to file"""
+        with open(filename, 'w') as f:
+            json.dump(self.profile, f, indent=2)
+    
+    def load(self, filename="user_profile.json"):
+        """Load user profile from file"""
+        try:
+            with open(filename, 'r') as f:
+                self.profile = json.load(f)
+        except FileNotFoundError:
+            print("[Profile] No existing profile found, starting fresh")
 
 def deepseek_chat(user_input, conversation_history=[]):
     """Get response from DeepSeek chatbot using direct API call"""
@@ -27,15 +105,23 @@ def deepseek_chat(user_input, conversation_history=[]):
         "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
         "Content-Type": "application/json"
     }
+    
+    # Include user profile context in the system message
+    profile_context = f"""Previous knowledge about the user:
+    - Current mood history: {user_profile.profile['mood_history'][-3:] if user_profile.profile['mood_history'] else 'Unknown'}
+    - Known preferences: {user_profile.profile['preferences']}
+    - Important facts: {user_profile.profile['facts']}
+    
+    Use this information to provide personalized responses while being empathetic to their emotional state."""
 
     messages = [
-        {"role": "system", "content": "You are a helpful assistant"},
-        *conversation_history,
+        {"role": "system", "content": f"You are a helpful assistant with memory of the user. {profile_context}"},
+        *conversation_history[-10:],
         {"role": "user", "content": user_input}
     ]
 
     payload = {
-        "model": "deepseek-reasoner",
+        "model": "deepseek-chat",
         "messages": messages,
         "stream": False
     }
@@ -113,9 +199,14 @@ def play_audio(base64_audio):
 
 
 def main():
+    global user_profile
+    user_profile = UserProfile()
+    user_profile.load()
+    
     conversation_history = []
     print("\n=== Starting Conversation Interface ===")
     print("Type 'exit' or 'quit' to end the conversation")
+    print(f"Loaded profile with {len(user_profile.profile['facts'])} facts and {len(user_profile.profile['mood_history'])} mood entries")
 
     while True:
         user_input = input("\nYou: ")
@@ -125,6 +216,10 @@ def main():
         print(f"\n[Main] Processing user input: {user_input}")
         chat_response = deepseek_chat(user_input, conversation_history)
         print(f"\nAssistant: {chat_response}")
+
+        # Update user profile
+        user_profile.update_from_interaction(user_input, chat_response)
+        user_profile.save()
 
         conversation_history.extend([
             {"role": "user", "content": user_input},
