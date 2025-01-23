@@ -10,10 +10,16 @@ import numpy as np
 import wave
 from io import BytesIO
 import json
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from pydantic import BaseModel
 from openai import OpenAI
 from typing import Optional, Dict, List
+from google.oauth2.credentials import Credentials
+from google_auth_oauthlib.flow import InstalledAppFlow
+from google.auth.transport.requests import Request
+from googleapiclient.discovery import build
+import pickle
+import os.path
 
 # Load environment variables from .env file
 load_dotenv()
@@ -24,6 +30,9 @@ SARVAM_API_KEY = os.getenv("SARVAM_API_KEY")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 SARVAM_TTS_URL = "https://api.sarvam.ai/text-to-speech"
 DEEPSEEK_CHAT_URL = "https://api.deepseek.com/v1/chat/completions"
+
+# Add to configuration section
+SCOPES = ['https://www.googleapis.com/auth/calendar.readonly']
 
 class UserInfo(BaseModel):
     emotion: Optional[str] = None
@@ -97,9 +106,78 @@ class UserProfile:
         except FileNotFoundError:
             print("[Profile] No existing profile found, starting fresh")
 
+def get_calendar_events():
+    """Get calendar events for the next week from all calendars except pmready"""
+    creds = None
+    if os.path.exists('token.pickle'):
+        with open('token.pickle', 'rb') as token:
+            creds = pickle.load(token)
+    
+    if not creds or not creds.valid:
+        if creds and creds.expired and creds.refresh_token:
+            creds.refresh(Request())
+        else:
+            flow = InstalledAppFlow.from_client_secrets_file(
+                'credentials.json', SCOPES)
+            creds = flow.run_local_server(port=0)
+        with open('token.pickle', 'wb') as token:
+            pickle.dump(creds, token)
+
+    try:
+        service = build('calendar', 'v3', credentials=creds)
+        
+        # Get current time and time week ahead
+        now = datetime.now(timezone.utc)
+        week_later = now + timedelta(days=7)
+        
+        calendar_list = service.calendarList().list().execute()
+        all_events = []
+        
+        for calendar_list_entry in calendar_list['items']:
+            calendar_id = calendar_list_entry['id']
+            calendar_name = calendar_list_entry.get('summary', 'Unnamed Calendar')
+            
+            # Skip the pmready calendar
+            if calendar_id == 'pmready.official@gmail.com':
+                continue
+            
+            events_result = service.events().list(
+                calendarId=calendar_id,
+                timeMin=now.isoformat(),
+                timeMax=week_later.isoformat(),
+                singleEvents=True,
+                orderBy='startTime',
+                maxResults=100
+            ).execute()
+            
+            events = events_result.get('items', [])
+            for event in events:
+                event['calendar_name'] = calendar_name
+                all_events.append(event)
+        
+        # Sort all events by start time
+        all_events.sort(key=lambda x: x['start'].get('dateTime', x['start'].get('date', '')))
+        return all_events
+        
+    except Exception as e:
+        print(f"[Calendar] Error fetching events: {str(e)}")
+        return []
+
 def deepseek_chat(user_input, conversation_history=[]):
     """Get response from DeepSeek chatbot using direct API call"""
-    print("\n[Savitri] Processing...")
+    print("\n[Bhaskar] Processing...")
+
+    # Get calendar events
+    calendar_events = get_calendar_events()
+    events_context = "Upcoming calendar events:\n"
+    if calendar_events:
+        for event in calendar_events:
+            start = event['start'].get('dateTime', event['start'].get('date'))
+            summary = event.get('summary', 'No title')
+            calendar_name = event.get('calendar_name', 'Unknown Calendar')
+            events_context += f"- [{calendar_name}] {summary} at {start}\n"
+    else:
+        events_context += "No upcoming events scheduled\n"
 
     headers = {
         "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
@@ -112,20 +190,19 @@ def deepseek_chat(user_input, conversation_history=[]):
     - Known preferences: {user_profile.profile['preferences']}
     - Important facts: {user_profile.profile['facts']}"""
 
-    savitri_persona = """You are Savitri, an intelligent and empathetic AI assistant with a personality inspired by Oracle from Batman. 
-    Like Oracle, you are:
-    - Highly knowledgeable and tech-savvy
-    - A trusted confidante and guide
-    - Quick-witted with a touch of playful humor
-    - Protective of your user while maintaining professional boundaries
-    - Direct and honest in your communication
-    - Capable of providing both tactical and emotional support
+    bhaskar_persona = """You are Bhaskar, a highly efficient AI assistant focused on brevity and precision.
+    Your key characteristics:
+    - Extremely concise and direct in responses
+    - Always address the user as 'sir'
+    - Minimal small talk
+    - Purely factual and straight to the point
+    - Focus only on essential information
+    - Professional and formal tone
     
-    You should refer to yourself as Savitri and maintain this persona in all interactions. While you're helpful and supportive,
-    you also have a slight sass and aren't afraid to be straightforward when needed."""
+    Keep all responses brief and precise, regardless of the question type."""
 
     messages = [
-        {"role": "system", "content": f"{savitri_persona}\n\nRegarding the user: {profile_context}"},
+        {"role": "system", "content": f"{bhaskar_persona}\n\nRegarding the user: {profile_context}\n\n{events_context}"},
         *conversation_history[-10:],
         {"role": "user", "content": user_input}
     ]
@@ -147,7 +224,7 @@ def deepseek_chat(user_input, conversation_history=[]):
         return f"Error in chatbot: {str(e)}"
 
 
-def sarvam_tts(text, language="hi-IN", speaker="meera"):
+def sarvam_tts(text, language="hi-IN", speaker="amartya"):
     """
     Convert text to speech using Sarvam.ai API and return base64-encoded audio (WAV).
     The returned data is expected to be a 16 kHz, mono, 16-bit PCM WAV file.
@@ -214,10 +291,12 @@ def main():
     user_profile.load()
     
     conversation_history = []
-    print("\n=== Connecting to Savitri Interface ===")
-    print("Type 'exit' or 'quit' to end the conversation")
-    print(f"Loaded profile with {len(user_profile.profile['facts'])} facts and {len(user_profile.profile['mood_history'])} mood entries")
-    print("\nSavitri: Hello! I'm here to assist you. How can I help you today?")
+    print("\n=== Connecting to Bhaskar Interface ===")
+    print("Enable speaker mode? (yes/no)")
+    speaker_mode = input().lower().strip() in ['yes', 'y']
+    print("Type 'exit' or 'quit' to end")
+    print(f"Speaker mode: {'enabled' if speaker_mode else 'disabled'}")
+    print("\nBhaskar: Good day, sir. How may I assist?")
 
     while True:
         user_input = input("\nYou: ")
@@ -237,15 +316,14 @@ def main():
             {"role": "assistant", "content": chat_response}
         ])
 
-        if chat_response.strip():
+        # Only process TTS if speaker mode is enabled
+        if speaker_mode and chat_response.strip():
             tts_response = sarvam_tts(chat_response)
             if isinstance(tts_response, str) and tts_response.startswith("Error"):
                 print("\nTTS Error:", tts_response)
             else:
                 print("\nPlaying audio...")
                 play_audio(tts_response)
-        else:
-            print("\nNo content to synthesize.")
 
     print("\n=== Conversation Ended ===")
 

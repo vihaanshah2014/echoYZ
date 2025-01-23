@@ -2,3 +2,5 @@
 /venv
 /notes
 user_profile.json
+token.pickle
+credentials.json
