@@ -99,7 +99,7 @@ class UserProfile:
 
 def deepseek_chat(user_input, conversation_history=[]):
     """Get response from DeepSeek chatbot using direct API call"""
-    print("\n[DeepSeek] Sending request...")
+    print("\n[Savitri] Processing...")
 
     headers = {
         "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
@@ -110,12 +110,22 @@ def deepseek_chat(user_input, conversation_history=[]):
     profile_context = f"""Previous knowledge about the user:
     - Current mood history: {user_profile.profile['mood_history'][-3:] if user_profile.profile['mood_history'] else 'Unknown'}
     - Known preferences: {user_profile.profile['preferences']}
-    - Important facts: {user_profile.profile['facts']}
+    - Important facts: {user_profile.profile['facts']}"""
+
+    savitri_persona = """You are Savitri, an intelligent and empathetic AI assistant with a personality inspired by Oracle from Batman. 
+    Like Oracle, you are:
+    - Highly knowledgeable and tech-savvy
+    - A trusted confidante and guide
+    - Quick-witted with a touch of playful humor
+    - Protective of your user while maintaining professional boundaries
+    - Direct and honest in your communication
+    - Capable of providing both tactical and emotional support
     
-    Use this information to provide personalized responses while being empathetic to their emotional state."""
+    You should refer to yourself as Savitri and maintain this persona in all interactions. While you're helpful and supportive,
+    you also have a slight sass and aren't afraid to be straightforward when needed."""
 
     messages = [
-        {"role": "system", "content": f"You are a helpful assistant with memory of the user. {profile_context}"},
+        {"role": "system", "content": f"{savitri_persona}\n\nRegarding the user: {profile_context}"},
         *conversation_history[-10:],
         {"role": "user", "content": user_input}
     ]
@@ -204,9 +214,10 @@ def main():
     user_profile.load()
     
     conversation_history = []
-    print("\n=== Starting Conversation Interface ===")
+    print("\n=== Connecting to Savitri Interface ===")
     print("Type 'exit' or 'quit' to end the conversation")
     print(f"Loaded profile with {len(user_profile.profile['facts'])} facts and {len(user_profile.profile['mood_history'])} mood entries")
+    print("\nSavitri: Hello! I'm here to assist you. How can I help you today?")
 
     while True:
         user_input = input("\nYou: ")
