@@ -240,7 +240,7 @@ def sarvam_tts(text, language="hi-IN", speaker="amartya"):
         "inputs": [text],
         "target_language_code": language,
         "speaker": speaker,
-        "pace": 1.26,
+        "pace": 1.16,
         "speech_sample_rate": 16000,
         "enable_preprocessing": True,
         "model": "bulbul:v1"
